@@ -137,7 +137,7 @@ section { padding-block: clamp(36px, 6vw, 72px); }
 .stage {
   --cw: clamp(168px, 50vw, 250px); --ch: calc(var(--cw) * 16 / 9);
   position: relative; height: calc(var(--ch) + 72px); perspective: 1500px; overflow: hidden;
-  cursor: grab; user-select: none; -webkit-user-select: none; touch-action: pan-y;
+  cursor: grab; user-select: none; -webkit-user-select: none; touch-action: pan-y; overscroll-behavior-x: contain;
   border-block: 1px solid var(--line);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 17%, #000 83%, transparent 100%);
           mask-image: linear-gradient(90deg, transparent 0%, #000 17%, #000 83%, transparent 100%);
@@ -624,6 +624,20 @@ stage.addEventListener('keydown', (e) => {
   else if (e.key === 'ArrowLeft') { touched(); go(idx - 1); e.preventDefault(); }
   else if (e.key === 'Enter' || e.key === ' ') { touched(); togglePlay(cards[active()]); e.preventDefault(); }
 });
+/* two-finger swipe on a trackpad (only while the cursor is over the carousel):
+   the cards follow your fingers, then settle on the nearest video when you stop */
+let wheelIdle = 0;
+stage.addEventListener('wheel', (e) => {
+  const dx = e.deltaMode === 1 ? e.deltaX * 16 : e.deltaX;
+  if (Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;   // mostly vertical: let the page scroll
+  e.preventDefault();                                      // stop the browser's back/forward swipe
+  touched();
+  angle += Math.max(-60, Math.min(60, dx)) * dragK;
+  target = angle;
+  paint();
+  clearTimeout(wheelIdle);
+  wheelIdle = setTimeout(() => go(Math.round(angle / step)), 140);
+}, { passive: false });
 stage.addEventListener('mouseenter', () => { hover = true; });
 stage.addEventListener('mouseleave', () => { hover = false; });
 
