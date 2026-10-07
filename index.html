@@ -246,6 +246,16 @@ html.anim-init .rv, html.anim-init .rv-photo, html.anim-init .rv-line { transiti
   html.anim .rv, html.anim .rv-photo, html.anim .rv-line { opacity: 1; transform: none; filter: none; transition: none; }
 }
 
+/* mute / unmute button on every video */
+.snd-btn { position: absolute; z-index: 4; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%;
+  display: grid; place-items: center; padding: 0; cursor: pointer; color: #fff;
+  background: rgba(0,0,0,.5); border: 1px solid rgba(255,255,255,.3); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  transition: background .15s, border-color .15s, transform .15s; }
+.snd-btn:hover { background: rgba(0,0,0,.7); border-color: var(--accent); transform: scale(1.06); }
+.snd-btn svg { width: 17px; height: 17px; fill: currentColor; }
+.snd-btn svg .w { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.film .frame .snd-btn { top: 10px; right: 10px; width: 30px; height: 30px; }
+
 /* services */
 .svc { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); border-top: 1px solid var(--line); }
 .svc > div { padding: 22px 22px 26px 0; border-bottom: 1px solid var(--line); min-width: 0; }
@@ -324,7 +334,6 @@ footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8p
         </div>
         <div class="ctrl">
           <span class="mono" id="i-count" style="margin-right:6px"></span>
-          <button type="button" id="snd" aria-label="Turn sound on" aria-pressed="false" hidden><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path id="snd-wave" d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12" style="display:none"/></svg></button>
           <button type="button" id="prev" aria-label="Previous video"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
           <button type="button" id="next" aria-label="Next video"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button>
         </div>
@@ -395,7 +404,7 @@ footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8p
 const SHORTS = [
   { title: 'Aurora Sneaker Drop',          kind: 'Product launch', dur: '0:28', hue: 24,  role: 'Edit · sound design · captions',      src: '', sample: true },
   { title: 'Night Market Diaries',         kind: 'Travel reel',    dur: '0:41', hue: 340, role: 'Edit · color · speed ramps',          src: '', sample: true },
-  { title: 'Ep. 112 Cold Open',            kind: 'Podcast clip',   dur: '0:52', hue: 210, role: 'Edit · captions · audio cleanup',     src: 'https://pub-34bb1b1a86f74630a4091e4c415dc302.r2.dev/Mayam%20Reel%201.mp4', sample: true },
+  { title: 'Ep. 112 Cold Open',            kind: 'Podcast clip',   dur: '0:52', hue: 210, role: 'Edit · captions · audio cleanup',     src: '', sample: true },
   { title: 'Bloom Skincare Spot',          kind: 'Brand ad',       dur: '0:15', hue: 150, role: 'Edit · motion titles · color',        src: '', sample: true },
   { title: 'Static Hearts Teaser',         kind: 'Music promo',    dur: '0:30', hue: 285, role: 'Edit · beat-synced cuts · VFX',       src: '', sample: true },
   { title: 'Three Mistakes Founders Make', kind: 'Talking head',   dur: '0:47', hue: 48,  role: 'Edit · hooks · b-roll',               src: '', sample: true },
@@ -473,6 +482,7 @@ ring.innerHTML = SHORTS.map((w, i) => `
       <div class="art"><b>${String(i + 1).padStart(2, '0')}</b></div>
       ${w.src ? `<video src="${w.src}" playsinline loop preload="metadata"></video>` : ''}
       <span class="playbtn">${PLAY_SVG}</span>
+      ${w.src ? '<button type="button" class="snd-btn" aria-label="Mute"></button>' : ''}
       <div class="cap"><h3>${w.title}</h3><div class="bar"><i></i></div><div class="t"><span class="cur">0:00</span><span>${w.dur}</span></div></div>
     </div>
   </article>`).join('');
@@ -522,8 +532,38 @@ function tick() {
 }
 const kick = () => { if (!raf) raf = requestAnimationFrame(tick); };
 
-/* Autoplay: the card in the center plays by itself (muted, so browsers allow it). Others stay paused. */
-let soundOn = false;
+/* ---------- sound ----------
+   One sound setting for the whole site. It starts ON. If the visitor mutes any video, every video stays
+   muted (also after swiping) until the page is refreshed.
+   Browsers don't allow sound before the visitor has clicked/tapped/pressed a key on the page, so until
+   then videos play silently and turn their sound on at the first interaction. */
+let soundOn = true, unlocked = false;
+const SND_ON = '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="w" d="M16.5 8.5a5 5 0 010 7M19 6a8.5 8.5 0 010 12"/></svg>';
+const SND_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path class="w" d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></svg>';
+const audible = () => soundOn && unlocked;
+function playWithSound(v) {
+  v.muted = !audible();
+  const pr = v.play();
+  if (pr) pr.catch(() => { v.muted = true; v.play().catch(() => {}); refreshSound(); });
+}
+function refreshSound() {
+  const on = audible();
+  document.querySelectorAll('.snd-btn').forEach((b) => {
+    b.innerHTML = on ? SND_ON : SND_OFF;
+    b.setAttribute('aria-label', on ? 'Mute' : 'Unmute');
+    b.setAttribute('aria-pressed', String(!on));
+  });
+  // apply to whatever is currently playing
+  document.querySelectorAll('.card video, .film .frame video').forEach((v) => { if (!v.paused) v.muted = !on; });
+}
+function setSound(on) { soundOn = on; if (on) unlocked = true; refreshSound(); }
+function unlock(e) {
+  if (unlocked) return;
+  if (e && e.target && e.target.closest && e.target.closest('.snd-btn')) return;   // the button handles itself
+  unlocked = true;
+  refreshSound();
+}
+['pointerdown', 'keydown', 'touchend'].forEach((ev) => window.addEventListener(ev, unlock, { capture: true, once: false, passive: true }));
 const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 function restartBar(card) {
   const bar = card.querySelector('.bar i');
@@ -552,23 +592,15 @@ function stopAll() {
 function startCard(card) {
   card.classList.add('playing'); card.classList.remove('paused');
   const v = card.querySelector('video');
-  if (v) { v.muted = !soundOn; v.play().catch(() => { v.muted = true; v.play().catch(() => {}); }); }
+  if (v) playWithSound(v);
 }
 function togglePlay(card) {
   if (!card.classList.contains('playing')) { startCard(card); return; }
   const v = card.querySelector('video');
   const pause = !card.classList.contains('paused');
   card.classList.toggle('paused', pause);
-  if (v) { pause ? v.pause() : v.play().catch(() => {}); }
+  if (v) { pause ? v.pause() : playWithSound(v); }
 }
-$('#snd').hidden = !SHORTS.some((w) => w.src);
-$('#snd').addEventListener('click', () => {
-  soundOn = !soundOn;
-  $('#snd').setAttribute('aria-pressed', String(soundOn));
-  $('#snd').setAttribute('aria-label', soundOn ? 'Turn sound off' : 'Turn sound on');
-  $('#snd-wave').style.display = soundOn ? '' : 'none';
-  const v = cards[active()].querySelector('video'); if (v) v.muted = !soundOn;
-});
 function info() {
   const w = SHORTS[active()];
   $('#i-kind').textContent = w.kind;
@@ -597,6 +629,7 @@ ticks.forEach((t, i) => t.addEventListener('click', () => { touched(); goToCard(
 
 let sx = 0, sa = 0, moved = false, downCard = null;
 stage.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.snd-btn')) return;
   dragging = true; moved = false; sx = e.clientX; sa = angle; touched();
   downCard = e.target.closest('.card');
   stage.setPointerCapture(e.pointerId); kick();
@@ -651,6 +684,25 @@ document.addEventListener('visibilitychange', () => {
 layout(); info();
 if (!reduced) startCard(cards[0]);
 
+/* pause the carousel while it's scrolled out of view (or while a long-form preview plays), resume after */
+let autoPaused = false;
+function pauseShort() {
+  const c = cards[active()];
+  if (c.classList.contains('playing') && !c.classList.contains('paused')) { togglePlay(c); autoPaused = true; }
+}
+function resumeShort() {
+  const c = cards[active()];
+  if (autoPaused && c.classList.contains('paused')) togglePlay(c);
+  autoPaused = false;
+}
+let stageVisible = true;
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(([e]) => {
+    stageVisible = e.isIntersecting;
+    if (!stageVisible) pauseShort(); else if (!player.open) resumeShort();
+  }, { threshold: 0.35 }).observe(stage);
+}
+
 /* ---------- long-form ----------
    Desktop: hovering a film plays a silent preview; moving away pauses it.
    Click / tap / Enter: opens the pop-up player with sound. Close with X, Esc, or a click outside. */
@@ -662,6 +714,7 @@ $('#films-grid').innerHTML = FILMS.map((f, i) => `
       ${f.src ? `<video src="${f.src}" muted playsinline loop preload="metadata"></video>` : ''}
       <span class="playbtn">${PLAY_SVG}</span>
       ${canHover ? '<span class="hint">Click to watch</span>' : ''}
+      ${f.src ? '<button type="button" class="snd-btn" aria-label="Mute"></button>' : ''}
       <span class="dur">${f.dur}</span>
       <div class="pbar"><i></i></div>
     </div>
@@ -675,17 +728,24 @@ document.querySelectorAll('.film .frame').forEach((fr) => {
   if (canHover) {
     fr.addEventListener('mouseenter', () => {
       fr.classList.add('hovering');
-      if (v) v.play().catch(() => {});
+      if (v) { pauseShort(); playWithSound(v); }
     });
     fr.addEventListener('mouseleave', () => {
       fr.classList.remove('hovering');
-      if (v) v.pause();
+      if (v) { v.pause(); if (stageVisible) resumeShort(); }
       else { bar.style.animation = 'none'; void bar.offsetWidth; bar.style.animation = ''; }
     });
   }
-  fr.addEventListener('click', () => openPlayer(+fr.dataset.i));
+  fr.addEventListener('click', (e) => { if (e.target.closest('.snd-btn')) return; openPlayer(+fr.dataset.i); });
   fr.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPlayer(+fr.dataset.i); } });
 });
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.snd-btn'); if (!b) return;
+  e.stopPropagation(); e.preventDefault();
+  setSound(!audible());
+}, true);
+refreshSound();
 
 const player = $('#player'), pFrame = $('#p-frame');
 let lastFocus = null;
@@ -704,7 +764,12 @@ function openPlayer(i) {
   document.documentElement.style.overflow = 'hidden';
   player.showModal();
   const pv = pFrame.querySelector('video');
-  if (pv) { pv.muted = false; pv.play().catch(() => {}); }
+  if (pv) {
+    unlocked = true;                       // opening the player was a click, so sound is allowed
+    pv.muted = !soundOn;
+    pv.play().catch(() => {});
+    pv.addEventListener('volumechange', () => { if (pv.muted === soundOn) setSound(!pv.muted); });
+  }
 }
 function closePlayer() {
   if (!player.open) return;
@@ -714,7 +779,8 @@ player.addEventListener('close', () => {
   const pv = pFrame.querySelector('video'); if (pv) pv.pause();
   pFrame.innerHTML = '';
   document.documentElement.style.overflow = '';
-  const sc = cards[active()]; if (sc.classList.contains('paused')) togglePlay(sc);
+  const sc = cards[active()]; if (sc.classList.contains('paused') && stageVisible) togglePlay(sc);
+  autoPaused = false;
   if (lastFocus) lastFocus.focus({ preventScroll: true });
 });
 $('#p-close').addEventListener('click', closePlayer);
