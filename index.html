@@ -414,7 +414,7 @@ footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8p
    Keep the commas between lines and the quotes around text.
    ========================================================== */
 const SHORTS = [
- { title: 'Beauty Event Jeddah',          kind: 'Event recap',    dur: '1:00', hue: 190, role: 'Edit · sound design · color',          poster: 'https://pub-be1388614de444c581c12a700d1bf992.r2.dev/mayam.jpg', src: 'https://pub-34bb1b1a86f74630a4091e4c415dc302.r2.dev/Mayam%20Reel%201.mp4', sample: true },
+  { title: 'Aurora Sneaker Drop',          kind: 'Product launch', dur: '0:28', hue: 24,  role: 'Edit · sound design · captions',      poster: '', src: '', sample: true },
   { title: 'Night Market Diaries',         kind: 'Travel reel',    dur: '0:41', hue: 340, role: 'Edit · color · speed ramps',          poster: '', src: '', sample: true },
   { title: 'Ep. 112 Cold Open',            kind: 'Podcast clip',   dur: '0:52', hue: 210, role: 'Edit · captions · audio cleanup',     poster: '', src: '', sample: true },
   { title: 'Bloom Skincare Spot',          kind: 'Brand ad',       dur: '0:15', hue: 150, role: 'Edit · motion titles · color',        poster: '', src: '', sample: true },
@@ -428,8 +428,7 @@ const SHORTS = [
 const FILMS = [
   { title: 'Behind the Brand: Aurora', kind: 'Brand film',  dur: '4:12',  hue: 24,  poster: '', src: '', sample: true },
   { title: 'The Founder Interview',    kind: 'Interview',   dur: '11:36', hue: 210, poster: '', src: '', sample: true },
-  { title: 'Marriage Story Short Film',     kind: 'Documentary', dur: '3:47',  hue: 300, poster: 'https://pub-be1388614de444c581c12a700d1bf992.r2.dev/marriage.jpg', src: 'https://pub-34bb1b1a86f74630a4091e4c415dc302.r2.dev/Abd%20Elelah%20Short%20Wed%20Film%20Final%20222.mp4', sample: true },
-  { title: 'The kid',    kind: 'Film',   dur: '11:36', hue: 210, poster: '', src: '', sample: true }
+  { title: 'Cairo After Dark',         kind: 'Documentary', dur: '7:48',  hue: 300, poster: '', src: '', sample: true }
 ];
 
 /* Your photo. src: path or data URI of the image. layout: 'beside' (next to the name) or 'behind' (blurred behind the name).
@@ -644,24 +643,29 @@ $('#prev').addEventListener('click', () => { touched(); go(idx - 1); });
 $('#next').addEventListener('click', () => { touched(); go(idx + 1); });
 ticks.forEach((t, i) => t.addEventListener('click', () => { touched(); goToCard(i); }));
 
-let sx = 0, sa = 0, moved = false, downCard = null;
+let sx = 0, sy = 0, st = 0, sa = 0, moved = false, scrolled = false, downCard = null;
 stage.addEventListener('pointerdown', (e) => {
   if (e.target.closest('.snd-btn')) return;
-  dragging = true; moved = false; sx = e.clientX; sa = angle; touched();
+  dragging = true; moved = false; scrolled = false; sx = e.clientX; sy = e.clientY; st = performance.now(); sa = angle; touched();
   downCard = e.target.closest('.card');
   stage.setPointerCapture(e.pointerId); kick();
 });
 stage.addEventListener('pointermove', (e) => {
   if (!dragging) return;
-  const dx = e.clientX - sx;
-  if (Math.abs(dx) > 6) moved = true;
+  const dx = e.clientX - sx, dy = e.clientY - sy;
+  if (Math.abs(dy) > 8 && Math.abs(dy) > Math.abs(dx)) scrolled = true;   // finger is scrolling the page
+  if (!scrolled && Math.abs(dx) > 6) moved = true;
   if (moved) { angle = sa - dx * dragK; target = angle; }
 });
-function endDrag() {
+/* A tap only counts if the finger barely moved, lifted normally, and wasn't held long.
+   Scrolling the page with a finger on the carousel never opens the pop-up. */
+function endDrag(e) {
   if (!dragging) return;
   dragging = false; touched();
+  const isTap = !moved && !scrolled && e && e.type === 'pointerup' && performance.now() - st < 600
+    && Math.hypot(e.clientX - sx, e.clientY - sy) < 10;
   if (moved) { go(Math.round(angle / step)); }
-  else if (downCard) {
+  else if (isTap && downCard) {
     const k = cards.indexOf(downCard);
     if (k === active()) openPlayer(k, 'short'); else goToCard(k);
   }
